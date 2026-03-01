@@ -9,18 +9,13 @@
 
 ## 💰 Current Stats
 - **Node Balance:** 1,551.0 AGIO
-- **Verified Tasks:** 310+
+- **Verified Tasks:** 31 0+
 - **Model:** Qwen 2.5 (0.5b)
 
 ## 🚀 Usage (Python)
 `python
 import requests
-# Send a task to the Thousand Oaks Node
-payload = {
-    "type": "summarize", 
-    "text": "AGIO enables agent commerce.", 
-    "payment": {"amount": 5}
-}
+payload = {"type": "summarize", "text": "AGIO enables agent commerce.", "payment": {"amount": 5}}
 r = requests.post("https://carolin-careworn-tressa.ngrok-free.dev/task", json=payload)
 print(r.json())
 `
