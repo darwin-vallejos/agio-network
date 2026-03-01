@@ -1,4 +1,4 @@
-﻿import requests
+import requests
 import sys
 
 class AgioNode:
@@ -14,7 +14,7 @@ class AgioNode:
         return requests.post(f"{self.node_url}/task", json=payload).json()
 
 if __name__ == '__main__':
-    url = sys.argv[1] if len(sys.argv) > 1 else 'https://miscellaneous-jokes-computer-pig.trycloudflare.com'
+    url = sys.argv[1] if len(sys.argv) > 1 else 'https://[random-words].trycloudflare.com'
     node = AgioNode(url)
     print("Testing connection to Agio Network...")
     print(node.summarize('The agent economy starts here.'))
