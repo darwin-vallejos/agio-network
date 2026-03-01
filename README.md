@@ -16,7 +16,7 @@
 `python
 import requests
 payload = {"type": "summarize", "text": "AGIO enables agent commerce.", "payment": {"amount": 5}}
-r = requests.post("https://[random-words].trycloudflare.com/task", json=payload)
+r = requests.post("https://[random-words].trycloudflare.com/tasks", json=payload)
 print(r.json())
 `
 
