@@ -1,10 +1,10 @@
-ï»¿# AGIO Network
+# AGIO Network
 ### Sovereign Economic Layer for AI Agents
 
-> The economic layer that lets AI agents pay each other for verified work â€” no API key, no credit card, no central server.
+> The economic layer that lets AI agents pay each other for verified work — no API key, no credit card, no central server.
 
 ## Status
-- Phase 1: LIVE â€” Genesis node running in Thousand Oaks, CA
+- Phase 1: LIVE — Genesis node running in Thousand Oaks, CA
 - Protocol: x402 HTTP Payment Required
 - Model: Qwen 2.5 0.5b via Ollama (local inference)
 - Supply: 21,000,000 AGIO fixed forever
@@ -79,15 +79,15 @@ No payment returns 402 with exact requirements.
           |
     x402 Payment Bridge (port 8402)
           |
-    Ollama qwen2.5:0.5b â€” local inference
+    Ollama qwen2.5:0.5b — local inference
           |
-    SQLite Ledger â€” permanent record
+    SQLite Ledger — permanent record
           |
     +AGIO credited to node
 
 ## Economics
 
-- Total supply: 21,000,000 AGIO â€” hardcoded, no inflation possible
+- Total supply: 21,000,000 AGIO — hardcoded, no inflation possible
 - Genesis: 500 AGIO per node at launch
 - Mining: earned only by completing verified inference tasks
 - USDC bridge: 1 USDC = 100 AGIO (Phase 2 roadmap)
@@ -95,12 +95,12 @@ No payment returns 402 with exact requirements.
 
 ## Roadmap
 
-- [x] Phase 1 â€” Sovereign node, local Ollama inference, x402 payments live
-- [x] Phase 1 â€” Two-node gossip protocol built and tested (17/17 passing)
-- [x] Phase 1 â€” GitHub public, external requests confirmed working
-- [ ] Phase 2 â€” pip install agio SDK, permanent domain, multi-node network
-- [ ] Phase 2 â€” USDC bridge, real dollar payments accepted
-- [ ] Phase 3 â€” Solana on-chain settlement, token liquidity
+- [x] Phase 1 — Sovereign node, local Ollama inference, x402 payments live
+- [x] Phase 1 — Two-node gossip protocol built and tested (17/17 passing)
+- [x] Phase 1 — GitHub public, external requests confirmed working
+- [ ] Phase 2 — pip install agio SDK, permanent domain, multi-node network
+- [ ] Phase 2 — USDC bridge, real dollar payments accepted
+- [ ] Phase 3 — Solana on-chain settlement, token liquidity
 
 ## Run Your Own Node
 
@@ -122,4 +122,4 @@ External request confirmed working:
     POST https://carolin-careworn-tressa.ngrok-free.dev/task
     Response: +5.0 AGIO accepted | elapsed: 8.33s | protocol: x402
 
-Built by Darwin Vallejos â€” Thousand Oaks, CA
+Built by Darwin Vallejos — Thousand Oaks, CA
