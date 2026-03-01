@@ -2,5 +2,5 @@
 
 Sovereign economic layer for AI agents.
 
-**Node:** https://PASTE_YOUR_CLOUDFLARE_URL_HERE/tasks
+**Node:** https://https://your-new-link.trycloudflare.com/tasks
 **Status:** Online
