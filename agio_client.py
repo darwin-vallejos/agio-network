@@ -1,4 +1,4 @@
-﻿"""
+"""
 AGIO Client SDK
 Lets any AI agent hire your Thousand Oaks node for inference.
 Usage:
