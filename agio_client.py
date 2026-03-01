@@ -24,7 +24,7 @@ class AgioNode:
             return {"error": str(e)}
 
 if __name__ == '__main__':
-    url = ''
+    url = 'https://miscellaneous-jokes-computer-pig.trycloudflare.com'
     node = AgioNode(url)
     print(f"[*] Connecting to AGIO Genesis Node: {url}")
     result = node.summarize('Verify the sovereign agent economy.')
