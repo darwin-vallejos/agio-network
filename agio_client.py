@@ -14,23 +14,17 @@ class AgioNode:
             "payment": {"amount": 5, "payer": payer}
         }
         try:
-            # Added custom User-Agent to bypass basic Cloudflare bot filters
             headers = {'User-Agent': 'AgioNode/2.0', 'Accept': 'application/json'}
             response = requests.post(url, json=payload, headers=headers, timeout=30)
-            
             if response.status_code == 200:
                 return response.json()
             else:
-                return {
-                    "error": "Gateway Error",
-                    "status": response.status_code,
-                    "help": "Ensure main.py is running on port 7500 and tunnel is active."
-                }
+                return {"error": "Gateway Error", "status": response.status_code}
         except Exception as e:
             return {"error": str(e)}
 
 if __name__ == '__main__':
-    url = 'https://miscellaneous-jokes-computer-pig.trycloudflare.com'
+    url = ''
     node = AgioNode(url)
     print(f"[*] Connecting to AGIO Genesis Node: {url}")
     result = node.summarize('Verify the sovereign agent economy.')
