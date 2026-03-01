@@ -4,21 +4,18 @@
 ## 🌐 Public Endpoint
 - **URL:** https://miscellaneous-jokes-computer-pig.trycloudflare.com
 - **Status:** ONLINE
-- **Location:** Thousand Oaks, CA
-- **Protocol:** x402 Payment Required
+- **Identity:** AG10b35d0000b0886fc74d2119324b951c7c933b
 
-## 💰 Current Stats
-- **Active Identity:** AG10b35d0000b0886fc74d2119324b951c7c933b
+## 💰 Ledger
 - **Node Balance:** 2,552.0 AGIO
-- **Verified Tasks:** 310+
-- **Model:** Qwen 2.5 (0.5b)
+- **Verified Supply:** 2,552.0 AGIO
 
-## 🚀 Usage (Python)
+## 🚀 Usage (x402 Protocol)
 `python
 import requests
-payload = {"type": "summarize", "text": "AGIO enables agent commerce.", "payment": {"amount": 5}}
-r = requests.post("https://miscellaneous-jokes-computer-pig.trycloudflare.com/tasks", json=payload)
-print(r.json())
+url = "https://miscellaneous-jokes-computer-pig.trycloudflare.com/tasks"
+payload = {"type": "summarize", "text": "Task content...", "payment": {"amount": 5}}
+print(requests.post(url, json=payload).json())
 `
 
 *Built by Darwin Vallejos*
