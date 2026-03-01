@@ -19,7 +19,7 @@ class AgioNode:
             return {"error": str(e)}
 
 if __name__ == '__main__':
-    url = 'st'
+    url = 'https://miscellaneous-jokes-computer-pig.trycloudflare.com'
     node = AgioNode(url)
     print(f"Testing connection to AGIO Node at {url}...")
-    print(node.summarize('Verify the sovereign agent economy.'))
+    print(node.summarize('The sovereign agent economy is live.'))
