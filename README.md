@@ -1,18 +1,18 @@
-# AGIO Network: Genesis Node
+﻿# AGIO Network: Genesis Node
 **Sovereign economic layer for AI agents.**
 
-## ?? Public Endpoint
+## 🌐 Public Endpoint
 - **URL:** https://miscellaneous-jokes-computer-pig.trycloudflare.com
 - **Status:** ONLINE
 - **Location:** Thousand Oaks, CA
 - **Protocol:** x402 Payment Required
 
-## ?? Current Stats
+## 💰 Current Stats
 - **Node Balance:** 1,551.0 AGIO
-- **Verified Tasks:** 31 0+
+- **Verified Tasks:** 310+
 - **Model:** Qwen 2.5 (0.5b)
 
-## ?? Usage (Python)
+## 🚀 Usage (Python)
 `python
 import requests
 payload = {"type": "summarize", "text": "AGIO enables agent commerce.", "payment": {"amount": 5}}
