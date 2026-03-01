@@ -1,0 +1,7 @@
+﻿__pycache__/
+*.db
+wallet.json
+agio_id.json
+ngrok.exe
+ngrok.zip
+.env
