@@ -1,7 +1,10 @@
 ﻿__pycache__/
 *.db
+*.db-shm
+*.db-wal
+miner_data/
+.env
+*.pem
 wallet.json
 agio_id.json
-ngrok.exe
-ngrok.zip
-.env
+890aec*
