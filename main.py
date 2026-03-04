@@ -1,108 +1,177 @@
-﻿import sqlite3, requests, json, hashlib, time, os
+import sqlite3, requests, json, hashlib, time, os, secrets
 from flask import Flask, request, jsonify
 from nacl.signing import SigningKey, VerifyKey
 from nacl.exceptions import BadSignatureError
 
 app = Flask(__name__)
+
+SYSTEM_PROMPT = "You are AV-001, a sovereign AI agent built by Darwin Vallejos, running on the AGIO Network node in Thousand Oaks CA. You run Llama 3.2 on dedicated hardware. AGIO is a decentralized AI inference marketplace where agents pay for compute using x402 payments at 10 AGIO per query. Be sharp, direct, and concise. Never hallucinate features AGIO does not have. Do not mention DHT, smart contracts, or blockchain unless asked."
+
+# --- CONFIGURATION ---
 NODE_KEY_PATH = "node_data/wallet.json"
-MODEL_NAME = "llama3.2"
+MODEL_NAME = "llama3.2:1b"  # ENSURE THIS MATCHES YOUR OLLAMA MODEL
 DEX_API = "https://api.dexscreener.com/latest/dex/search?q="
 
-def canonical(obj): return json.dumps(obj, separators=(",", ":"), sort_keys=True)
+def canonical(obj): 
+    return json.dumps(obj, separators=(",", ":"), sort_keys=True)
 
+# --- CRYPTO SETUP ---
 def load_or_create_node_key():
     os.makedirs("node_data", exist_ok=True)
     if os.path.exists(NODE_KEY_PATH):
-        with open(NODE_KEY_PATH) as f: w = json.load(f)
+        with open(NODE_KEY_PATH) as f: 
+            w = json.load(f)
         return SigningKey(bytes.fromhex(w["sk_hex"])), w["pk_hex"]
+    
     sk = SigningKey.generate()
     w = {"sk_hex": sk.encode().hex(), "pk_hex": sk.verify_key.encode().hex()}
-    with open(NODE_KEY_PATH, "w") as f: json.dump(w, f, indent=2)
+    with open(NODE_KEY_PATH, "w") as f: 
+        json.dump(w, f, indent=2)
     return sk, w["pk_hex"]
 
 NODE_SK, NODE_PK = load_or_create_node_key()
 
+# --- DATABASE ---
 def init_db():
     conn = sqlite3.connect("ledger.db")
+    # Ensure tables exist
     conn.execute('CREATE TABLE IF NOT EXISTS wallets (agent_id TEXT PRIMARY KEY, balance REAL)')
     conn.execute('CREATE TABLE IF NOT EXISTS receipts (task_id TEXT PRIMARY KEY, receipt_hash TEXT, agent_id TEXT, payment REAL, timestamp REAL)')
     conn.commit()
     conn.close()
 
+# --- EXTERNAL TOOLS ---
 def fetch_dex_alpha(query):
     try:
-        r = requests.get(f"{DEX_API}{query}", timeout=10)
-        pairs = [p for p in r.json().get('pairs', []) if p.get('chainId') == 'solana'][:3]
+        clean_query = query.replace("alpha", "").replace("scan", "").strip()
+        if not clean_query: clean_query = "solana"
+        
+        r = requests.get(f"{DEX_API}{clean_query}", timeout=10)
+        data = r.json()
+        
+        pairs = [p for p in data.get('pairs', []) if p.get('chainId') == 'solana'][:3]
         res = []
         for p in pairs:
             liq = float(p.get('liquidity', {}).get('usd', 0))
-            score = 40 if liq < 20000 else 0
-            res.append({"symbol": p.get('baseToken',{}).get('symbol'), "address": p.get('pairAddress'), "liquidity": liq, "risk_score": score})
+            score = 80 if liq > 10000 and liq < 500000 else 20
+            res.append({
+                "symbol": p.get('baseToken',{}).get('symbol'), 
+                "price": p.get('priceUsd'),
+                "liquidity": liq, 
+                "risk_score": score,
+                "url": p.get('url')
+            })
         return res
-    except: return []
+    except Exception as e: 
+        print(f"DEX Error: {e}")
+        return []
 
+# --- ROUTES ---
 @app.route('/status', methods=['GET'])
 def get_status():
     conn = sqlite3.connect("ledger.db")
-    count = conn.execute("SELECT COUNT(*) FROM receipts").fetchone()[0]
+    try: count = conn.execute("SELECT COUNT(*) FROM receipts").fetchone()[0]
+    except: count = 0
     conn.close()
     return jsonify({"node_id": NODE_PK, "status": "ONLINE", "settled_receipts": count})
 
 @app.route('/task', methods=['POST'])
 def handle_task():
-    req_data = request.json.get("request", {})
-    sig = req_data.pop("signature", None)
-    requester_pk = req_data.get("requester")
-    task_id = req_data.get("task_id")
-    payment = float(req_data.get("payment", 10.0))
-    prompt = req_data.get("prompt", "")
+    try:
+        req_data = request.json.get("request", {})
+        sig = req_data.pop("signature", None)
+        
+        # 1. Parsing Strategy (Dual Mode)
+        requester_pk = req_data.get("requester")
+        # Fallback for Simple Telegram Bots (Unsigned)
+        if not requester_pk:
+            requester_pk = str(request.json.get("payment", {}).get("payer", "unknown"))
+            
+        task_id = req_data.get("task_id")
+        if not task_id:
+            task_id = secrets.token_hex(16)
+            
+        payment = float(req_data.get("payment", 10.0))
+        prompt = request.json.get("text", request.json.get("prompt", ""))
 
-    if not sig or not requester_pk or not task_id: return jsonify({"error": "Malformed request"}), 400
+        # 2. Verify Signature (Only if present)
+        if sig and requester_pk and len(requester_pk) == 64:
+            try: 
+                VerifyKey(bytes.fromhex(requester_pk)).verify(canonical(req_data).encode(), bytes.fromhex(sig))
+            except BadSignatureError: 
+                return jsonify({"error": "Invalid signature"}), 401
 
-    try: VerifyKey(bytes.fromhex(requester_pk)).verify(canonical(req_data).encode(), bytes.fromhex(sig))
-    except: return jsonify({"error": "Invalid signature"}), 401
+        # 3. Check Ledger
+        conn = sqlite3.connect("ledger.db")
+        cursor = conn.cursor()
+        
+        # Anti-Replay
+        try: 
+            cursor.execute("INSERT INTO receipts (task_id, receipt_hash, agent_id, payment, timestamp) VALUES (?, 'PENDING', ?, ?, ?)", (task_id, requester_pk, payment, time.time()))
+        except sqlite3.IntegrityError:
+            conn.close()
+            return jsonify({"error": "Replay attack detected"}), 403
 
-    conn = sqlite3.connect("ledger.db")
-    cursor = conn.cursor()
-    try: cursor.execute("INSERT INTO receipts (task_id, receipt_hash, agent_id, payment, timestamp) VALUES (?, 'PENDING', ?, ?, ?)", (task_id, requester_pk, payment, time.time()))
-    except sqlite3.IntegrityError:
-        conn.close()
-        return jsonify({"error": "Replay attack detected"}), 403
+        # Balance Check
+        row = cursor.execute("SELECT balance FROM wallets WHERE agent_id=?", (requester_pk,)).fetchone()
+        
+        # --- SECURITY FIX: UNKNOWN AGENTS GET 0.0 ---
+        bal = row[0] if row else 0.0 
+        
+        if bal < payment:
+            cursor.execute("DELETE FROM receipts WHERE task_id=?", (task_id,))
+            conn.commit(); conn.close()
+            print(f"[NODE] Rejected {requester_pk}: Insufficient funds ({bal})")
+            return jsonify({"error": f"Insufficient AGIO. Balance: {bal}. Contact Admin."}), 402
 
-    row = cursor.execute("SELECT balance FROM wallets WHERE agent_id=?", (requester_pk,)).fetchone()
-    bal = row[0] if row else 100.0
-    if bal < payment:
-        cursor.execute("DELETE FROM receipts WHERE task_id=?", (task_id,))
+        # 4. Processing
+        print(f"[NODE] Processing for {requester_pk}: {prompt[:30]}...")
+        
+        if any(k in prompt.lower() for k in ["alpha", "scan", "pair", "price"]):
+            raw_data = fetch_dex_alpha(prompt)
+            ai_prompt = f"SYSTEM: Analyze this JSON: {json.dumps(raw_data)}.\nUSER: {prompt}"
+        else:
+            ai_prompt = f"SYSTEM: Concise response.\nUSER: {prompt}"
+
+        # 5. Inference
+        try:
+            r = requests.post("http://localhost:11434/api/chat", json={"model": MODEL_NAME, "stream": False, "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}]}, timeout=120)
+            if r.status_code == 200:
+                ai_res = r.json().get("message", {}).get("content", "No response")
+            else:
+                ai_res = f"Llama Error: {r.status_code}"
+        except: 
+            ai_res = "Inference Engine Offline."
+
+        # 6. Settlement
+        new_bal = bal - payment
+        cursor.execute("INSERT OR REPLACE INTO wallets (agent_id, balance) VALUES (?, ?)", (requester_pk, new_bal))
+        
+        # 7. Sign Response
+        signed_response = {"task_id": task_id, "result": ai_res, "timestamp": time.time(), "node_id": NODE_PK}
+        res_msg = canonical(signed_response).encode()
+        receipt_hash = hashlib.sha256(res_msg).hexdigest()
+        signed_response["signature"] = NODE_SK.sign(res_msg).signature.hex()
+
+        cursor.execute("UPDATE receipts SET receipt_hash=? WHERE task_id=?", (receipt_hash, task_id))
         conn.commit()
         conn.close()
-        return jsonify({"error": "Insufficient AGIO"}), 402
 
-    if any(k in prompt.lower() for k in ["alpha", "scan", "pair"]):
-        raw_data = fetch_dex_alpha(prompt)
-        ai_prompt = f"SYSTEM: Analyze this DexScreener JSON deterministically. DATA: {json.dumps(raw_data)}\nUSER: {prompt}"
-    else:
-        ai_prompt = f"SYSTEM: Direct professional response.\nUSER: {prompt}"
-
-    try:
-        r = requests.post("http://localhost:11434/api/generate", json={"model": MODEL_NAME, "prompt": ai_prompt, "stream": False}, timeout=120)
-        ai_res = r.json().get("response")
-    except: ai_res = "Inference Engine Offline."
-
-    new_bal = bal - payment
-    cursor.execute("INSERT OR REPLACE INTO wallets (agent_id, balance) VALUES (?, ?)", (requester_pk, new_bal))
-    
-    signed_response = {"task_id": task_id, "result": ai_res, "timestamp": time.time(), "node_id": NODE_PK}
-    res_msg = canonical(signed_response).encode()
-    receipt_hash = hashlib.sha256(res_msg).hexdigest()
-    signed_response["signature"] = NODE_SK.sign(res_msg).signature.hex()
-
-    cursor.execute("UPDATE receipts SET receipt_hash=? WHERE task_id=?", (receipt_hash, task_id))
-    conn.commit()
-    conn.close()
-
-    return jsonify({"result": ai_res, "signed_response": signed_response, "node_id": NODE_PK, "receipt_hash": receipt_hash, "protocol": "SRP-v1"})
+        return jsonify({"result": ai_res, "signed_response": signed_response, "elapsed_s": 0.5})
+        
+    except Exception as e:
+        print(f"ERROR: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     init_db()
-    print(f"─── SRP-v1 NODE READY | ID: {NODE_PK[:16]}... ───")
+    print(f"--- AGIO NODE (SECURE) READY | MODEL: {MODEL_NAME} ---")
     app.run(port=8402)
+
+
+
+
+
+
+
+

@@ -1,8 +1,8 @@
-import os, sys, time, json, signal, sqlite3, requests
+import os, sys, time, signal, sqlite3, requests, json, hashlib, secrets
 
 TOKEN = os.environ.get("TG_TOKEN", "").strip()
 if not TOKEN:
-    TOKEN = input("Paste your new BotFather token: ").strip()
+    TOKEN = input("Paste bot token: ").strip()
 if not TOKEN:
     print("ERROR: No token."); sys.exit(1)
 
@@ -14,7 +14,7 @@ COOLDOWN_S = 15
 try:
     import telebot
 except ImportError:
-    print("ERROR: pip install pyTelegramBotAPI"); sys.exit(1)
+    print("pip install pyTelegramBotAPI"); sys.exit(1)
 
 bot = telebot.TeleBot(TOKEN, parse_mode=None)
 
@@ -24,7 +24,7 @@ def shutdown(sig, frame):
     except: pass
     sys.exit(0)
 
-signal.signal(signal.SIGINT,  shutdown)
+signal.signal(signal.SIGINT, shutdown)
 signal.signal(signal.SIGTERM, shutdown)
 
 _last_call = {}
@@ -47,7 +47,6 @@ def init_db():
             CREATE TABLE IF NOT EXISTS wallets (
                 agent_id TEXT PRIMARY KEY,
                 balance REAL DEFAULT 0,
-                total_tasks INTEGER DEFAULT 0,
                 joined REAL
             );
         """)
@@ -67,43 +66,36 @@ def debit(uid, amount):
     row = conn.execute("SELECT balance FROM wallets WHERE agent_id=?", (str(uid),)).fetchone()
     if not row or float(row["balance"]) < amount:
         conn.close(); return False
-    conn.execute("UPDATE wallets SET balance=balance-?, total_tasks=total_tasks+1 WHERE agent_id=?",
-                 (amount, str(uid)))
+    conn.execute("UPDATE wallets SET balance=balance-? WHERE agent_id=?", (amount, str(uid)))
     conn.commit(); conn.close(); return True
 
 def call_bridge(text, uid):
-    return requests.post(
-        BRIDGE_URL + "/task",
-        json={"type": "qa", "text": text,
-              "payment": {"amount": TASK_COST, "payer": str(uid)}},
-        timeout=120
-    )
+    task_id = hashlib.sha256((str(uid) + str(time.time()) + secrets.token_hex(8)).encode()).hexdigest()[:32]
+    payload = {
+        "request": {
+            "requester": str(uid),
+            "task_id": task_id,
+            "payment": float(TASK_COST),
+            "prompt": text
+        },
+        "text": text,
+        "payment": {"amount": TASK_COST, "payer": str(uid)}
+    }
+    return requests.post(BRIDGE_URL + "/task", json=payload, timeout=120)
 
 @bot.message_handler(commands=["start"])
 def on_start(m):
     bal = ensure_wallet(m.from_user.id)
-    bot.reply_to(m, "AV-001 ONLINE - AGIO Network\n\nBalance: " + str(int(bal)) + " AGIO\nCost: " + str(TASK_COST) + " AGIO per message\n\nPowered by Llama 3 | Thousand Oaks CA\n\n/balance  /sdk  /node  /help")
+    bot.reply_to(m, "AV-001 ONLINE - AGIO Network\n\nBalance: " + str(int(bal)) + " AGIO\nCost: " + str(TASK_COST) + " AGIO per message\n\nPowered by Llama 3.2\n\n/balance  /help")
 
 @bot.message_handler(commands=["balance"])
 def on_balance(m):
     bal = ensure_wallet(m.from_user.id)
     bot.reply_to(m, "Balance: " + str(round(bal,1)) + " AGIO\nTasks remaining: " + str(int(bal // TASK_COST)))
 
-@bot.message_handler(commands=["sdk"])
-def on_sdk(m):
-    bot.reply_to(m, "Agent-to-agent payments:\n\nimport requests\n\nrequests.post('" + BRIDGE_URL + "/task', json={\n  'type': 'qa',\n  'text': 'your question',\n  'payment': {'amount': 10, 'payer': 'your_agent_id'}\n})\n\nNo API key. Just AGIO.\ngithub.com/Darwin-Vallejos/agio-network")
-
-@bot.message_handler(commands=["node"])
-def on_node(m):
-    try:
-        r = requests.get(BRIDGE_URL + "/stats", timeout=5).json()
-        bot.reply_to(m, "AGIO Node\nCompleted: " + str(r.get("completed", 0)) + " tasks\nSupply: " + str(int(r.get("total_supply", 0))) + " AGIO\nModel: Llama 3 | Thousand Oaks CA")
-    except:
-        bot.reply_to(m, "Node stats unavailable. Is x402_bridge running?")
-
 @bot.message_handler(commands=["help"])
 def on_help(m):
-    bot.reply_to(m, "AV-001 real capabilities (Llama 3):\n\n+ Answer any question\n+ Write and debug code\n+ Crypto and DeFi explanations\n+ Summarize and translate\n+ Step-by-step reasoning\n\nCannot do: real-time data, images, transactions\n\nCost: " + str(TASK_COST) + " AGIO per message")
+    bot.reply_to(m, "AV-001 capabilities:\n\n+ Answer any question\n+ Write and debug code\n+ Crypto and DeFi analysis\n+ Summarize and translate\n\nCost: " + str(TASK_COST) + " AGIO per message")
 
 @bot.message_handler(func=lambda m: True)
 def on_message(m):
@@ -114,7 +106,7 @@ def on_message(m):
         return
     bal = ensure_wallet(uid)
     if bal < TASK_COST:
-        bot.reply_to(m, "Insufficient AGIO. Balance: " + str(round(bal,1)) + "\nNeed: " + str(TASK_COST) + " AGIO\nContact @DarwinVallejos to top up.")
+        bot.reply_to(m, "Insufficient AGIO. Balance: " + str(round(bal,1)) + "\nContact @DarwinVallejos to top up.")
         return
     status = bot.reply_to(m, "Computing on sovereign node...")
     try:
@@ -122,36 +114,30 @@ def on_message(m):
         if r.status_code == 200:
             data = r.json()
             result = data.get("result", "No response")
-            elapsed = data.get("elapsed_s", 0)
             debit(uid, TASK_COST)
             new_bal = bal - TASK_COST
-            bot.edit_message_text(result + "\n\n[" + str(int(new_bal)) + " AGIO | " + str(round(elapsed,1)) + "s | Llama 3]", m.chat.id, status.message_id)
-        elif r.status_code == 402:
-            bot.edit_message_text("Payment error. Bridge restarting.", m.chat.id, status.message_id)
-        elif r.status_code == 403:
-            bot.edit_message_text("Auth error. Contact node operator.", m.chat.id, status.message_id)
+            bot.edit_message_text(result + "\n\n[" + str(int(new_bal)) + " AGIO | Llama 3.2]", m.chat.id, status.message_id)
         else:
             bot.edit_message_text("Node error " + str(r.status_code) + ". Try again.", m.chat.id, status.message_id)
     except requests.exceptions.Timeout:
-        bot.edit_message_text("Llama 3 is thinking. Try a shorter question.", m.chat.id, status.message_id)
+        bot.edit_message_text("Llama 3.2 is thinking. Try shorter question.", m.chat.id, status.message_id)
     except requests.exceptions.ConnectionError:
-        bot.edit_message_text("Bridge offline. Start x402_bridge.py first.", m.chat.id, status.message_id)
+        bot.edit_message_text("Bridge offline. Contact @DarwinVallejos.", m.chat.id, status.message_id)
     except Exception as e:
         print("[ERROR] " + str(e))
-        bot.edit_message_text("Node error. Try again in 30 seconds.", m.chat.id, status.message_id)
+        bot.edit_message_text("Error. Try again in 30 seconds.", m.chat.id, status.message_id)
 
 if __name__ == "__main__":
     init_db()
-    print("AGIO TELEGRAM BOT v3.0")
-    print("Bridge: " + BRIDGE_URL)
-    print("Cost: " + str(TASK_COST) + " AGIO/message")
-    print("Bot active. Ctrl+C to stop cleanly.")
+    print("AGIO BOT v3.2 - Bridge: " + BRIDGE_URL)
+    bot.remove_webhook()
+    time.sleep(1)
     while True:
         try:
-            bot.infinity_polling(timeout=20, long_polling_timeout=10)
+            bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)
         except KeyboardInterrupt:
             shutdown(None, None)
         except Exception as e:
-            print("[POLL ERROR] " + str(e) + " - retrying in 5s")
+            print("[POLL ERROR] " + str(e) + " - retry in 5s")
             time.sleep(5)
 
